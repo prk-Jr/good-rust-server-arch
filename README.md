@@ -1,94 +1,76 @@
-# orders-hex workspace
+# Orders API
 
-Hexagonal Orders API split into:
-- `crates/orders-types` — shared domain types and port traits.
-- `crates/orders-repo` — database adapters behind features (`memory` / `sqlite`) exposing `Repo` and `build_repo`.
-- `crates/orders-hex` — application/service layer and HTTP adapter. Depends on `orders-types`.
-- `crates/orders-app` — binary crate wiring config + repo + HTTP server. Default workspace member, so `cargo run` targets it.
-- `crates/orders-client` — typed HTTP client for the Orders API (reqwest-based).
+A production-grade Rust implementation of a Hexagonal Architecture (Ports & Adapters) for a simple Orders API.
 
-## Build & Run (memory)
+## Workspace layout
+- `crates/orders-types` - domain types + port traits
+- `crates/orders-repo` - database adapters (memory / sqlite)
+- `crates/orders-hex` - application layer + HTTP inbound adapter
+- `crates/orders-app` - binary crate wiring config + repo + server
+- `crates/orders-client` - typed HTTP client
+
+## Features & architecture
+- Hexagonal design: domain logic isolated behind ports; adapters implement the ports
+- Repository is a port; select adapter via Cargo features
+- Two DB adapters:
+  - `memory`: DashMap-based repository
+  - `sqlite`: SQLx adapter with auto-applied migrations
+- HTTP inbound adapter built on Axum 0.8 (+ tower-http tracing)
+- Errors map cleanly into structured HTTP responses
+- Feature-gated dependencies keep builds lean and tests fast
+  - Defaults: `orders-app` -> `sqlite`, `orders-repo` -> `memory`
+  - Prefer enabling exactly one repo feature (`memory` or `sqlite`)
+
+## Running the API
+### In-memory repository (default for tests)
 ```bash
 cargo run --no-default-features --features memory
-# Server binds to port 3000 by default (set SERVER_PORT env to change)
 ```
+Runs on port 3000 unless `SERVER_PORT` is set.
 
-## Build & Run (sqlite)
-
+### SQLite repository (default for `orders-app`)
 ```bash
-export DATABASE_URL="sqlite://data/orders.db"  # parent dir auto-created; file auto-created
-cargo run                     # default feature on orders-app is sqlite
-# or explicitly:
-# cargo run --no-default-features --features sqlite
+export DATABASE_URL="sqlite://data/orders.db"
+cargo run                  # uses sqlite (default feature of orders-app)
+# or:
+cargo run --no-default-features --features sqlite
 ```
-# Migrations live at `crates/orders-repo/migrations` (applied automatically by the SQLite adapter).
+Migrations live in `crates/orders-repo/migrations/` and are applied on startup.
 
-Note: `orders-repo` features are mutually exclusive; do not enable both `memory` and `sqlite`.
+## Testing
+- Domain & ports: `cargo test -p orders-types`
+- Repo adapters: `cargo test -p orders-repo` (memory default) / `cargo test -p orders-repo --features sqlite`
+- Application + HTTP: `cargo test -p orders-hex`
+- App wiring: `cargo test -p orders-app` (sqlite) / `cargo test -p orders-app --no-default-features --features memory`
+- Run everything: `cargo test --all`
+- Full validation: `./validate_all.sh` (checks, clippy, feature-matrix tests, release builds)
 
-## Tests
+## API endpoints
+- `POST /orders` - create order
+- `GET /orders/{id}` - get order by ID
+- `GET /orders` - list all orders
+- `PATCH /orders/{id}/status` - update order status
+- `DELETE /orders/{id}` - delete an order
+- `GET /health` - health check
 
-Run library + integration tests (uses in-memory repo via dev-deps):
-
-```bash
-cargo test -p orders-hex
-```
-
-Crate-specific:
-- Domain/ports: `cargo test -p orders-types`
-- Repo adapters (memory default): `cargo test -p orders-repo`
-- Repo sqlite adapter: `cargo test -p orders-repo --features sqlite`
-- App wiring (sqlite default): `cargo test -p orders-app`
-- App wiring (memory): `cargo test -p orders-app --no-default-features --features memory`
-
-Full suite:
-- `./validate_all.sh` runs checks, clippy, feature-matrix tests, and release builds.
-
-Logging:
-- `orders-app` defaults `RUST_LOG=debug` if unset. Set `RUST_LOG=info` for quieter logs.
-
-Feature defaults:
-- `orders-app` default features enable `sqlite`.
-- `orders-repo` default features enable `memory`; use `--no-default-features --features sqlite` to flip.
-
-Migrations:
-- SQLite adapter auto-applies `crates/orders-repo/migrations/0001_create_orders.sql` on startup.
-
-## Endpoints
-
-* `POST /orders` -> create order  
-  JSON body: `{ "customer_name": "...", "email": "...", "items":[{"name":"...", "qty":1, "unit_price_cents":100}] }`
-* `GET /health` -> liveness probe
-* `GET /orders/{id}` -> fetch order
-* `GET /orders` -> list orders
-* `PATCH /orders/{id}/status` -> update status `{"status":"Shipped"}`
-* `DELETE /orders/{id}` -> delete
-
-## Design notes
-
-* Hexagonal: domain + application + ports + adapters
-* DB adaptors are compile-time optional (memory / sqlite)
-* Domain validation lives in `domain::order`
-* Service layer returns `AppError` mapped to HTTP responses
-* Feature flags keep deps lean: `orders-app` defaults to sqlite; `orders-repo` defaults to memory for tests.
-* Structured logging with per-request IDs; health endpoint at `/health`.
-
-## Quick usage examples
-
+## Example requests
 Create order:
 ```bash
 curl -X POST http://127.0.0.1:3000/orders \
   -H "Content-Type: application/json" \
-  -d '{"customer_name":"Alice","email":"alice@example.com","items":[{"name":"Widget","qty":2,"unit_price_cents":500}]}'
+  -d '{
+    "customer_name": "Alice",
+    "email": "alice@example.com",
+    "items":[{"name":"Widget","qty":2,"unit_price_cents":500}]
+  }'
 ```
 
 List:
-
 ```bash
 curl http://127.0.0.1:3000/orders
 ```
 
 Update status:
-
 ```bash
 curl -X PATCH http://127.0.0.1:3000/orders/<id>/status \
   -H "Content-Type: application/json" \
@@ -96,13 +78,11 @@ curl -X PATCH http://127.0.0.1:3000/orders/<id>/status \
 ```
 
 Delete:
-
 ```bash
 curl -X DELETE http://127.0.0.1:3000/orders/<id>
 ```
 
 ## HTTP client (`orders-client`)
-
 ```rust
 use orders_client::{OrdersClient, CreateOrderRequest};
 use orders_types::domain::order::OrderItem;
@@ -110,15 +90,28 @@ use orders_types::domain::order::OrderItem;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let client = OrdersClient::new("http://127.0.0.1:3000/")?;
+
     let created = client
         .create_order(CreateOrderRequest {
             customer_name: "Alice".into(),
             email: "alice@example.com".into(),
-            items: vec![OrderItem { name: "Widget".into(), qty: 2, unit_price_cents: 500 }],
+            items: vec![
+                OrderItem {
+                    name: "Widget".into(),
+                    qty: 2,
+                    unit_price_cents: 500,
+                },
+            ],
         })
         .await?;
+
     println!("created id={}", created.id);
     Ok(())
 }
 ```
-For an end-to-end run, launch `orders-app` and point `orders-client` at it; see the client README for usage.
+
+## Design notes
+- Domain validation lives in `orders-types`; application layer orchestrates interactions
+- Compile-time adapter selection via features (`memory` vs `sqlite`)
+- Structured tracing with per-request IDs (`RUST_LOG` defaults to `debug` if unset)
+- SQLite adapter applies migrations from `crates/orders-repo/migrations/0001_create_orders.sql` on startup
