@@ -1,0 +1,24 @@
+[package]
+name = "orders-hex"
+version = "0.1.0"
+edition = "2021"
+authors = ["You"]
+
+[dependencies]
+orders-types = { path = "../orders-types" }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+axum = { workspace = true }
+tower-http = { version = "0.6.7", features = ["trace", "cors"] }
+tower-layer = "0.3.3"
+
+[dev-dependencies]
+orders-repo = { workspace = true, default-features = false, features = ["memory"] }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+chrono = { workspace = true }

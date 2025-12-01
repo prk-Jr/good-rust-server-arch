@@ -1,0 +1,21 @@
+[package]
+name = "orders-client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+orders-types = { workspace = true }
+reqwest = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+tracing = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+httpmock = "0.7"
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+orders-hex = { workspace = true }
+orders-repo = { workspace = true, default-features = false, features = ["memory"] }

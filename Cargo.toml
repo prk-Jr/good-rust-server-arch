@@ -1,0 +1,32 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/orders-hex",
+    "crates/orders-app",
+    "crates/orders-types",
+    "crates/orders-repo",
+    "crates/orders-client",
+]
+default-members = ["crates/orders-app"]
+
+[workspace.dependencies]
+anyhow = "1.0"
+async-trait = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1", features = ["serde", "v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio = { version = "1.48", features = ["rt-multi-thread", "macros"] }
+axum = "0.8.7"
+reqwest = { version = "0.12.24", features = ["json"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "macros", "uuid", "chrono"] }
+dashmap = { version = "5" }
+orders-hex = { path = "crates/orders-hex" }
+orders-types = { path = "crates/orders-types" }
+orders-repo = { path = "crates/orders-repo", default-features = false }
+orders-client = { path = "crates/orders-client" }
+dotenvy = "0.15"
+tempfile = "3"
